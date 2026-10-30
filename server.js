@@ -7,6 +7,7 @@ const path = require('path');
 const { URL } = require('url');
 const U = require('./lib/universe');
 const { analyze } = require('./lib/signals');
+const M = require('./lib/macro');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC = path.join(__dirname, 'public');
@@ -62,6 +63,30 @@ async function fetchMany(symbols, limit = 8) {
   return out.filter(Boolean);
 }
 
+// ---------- News (Google News RSS, Indonesian economy & market) ----------
+let newsCache = { t: 0, items: [] };
+const NEWS_URL = 'https://news.google.com/rss/search?q=' + encodeURIComponent('(IHSG OR "Bank Indonesia" OR rupiah OR "ekonomi Indonesia" OR "Indonesia economy") when:3d') + '&hl=en-ID&gl=ID&ceid=ID:en';
+
+const OFF_TOPIC = /\b(Asian Games|SEA Games|Olympic|athlete|football|sepak ?bola|badminton|concert|celebrity)\b/i;
+
+async function fetchNews() {
+  if (Date.now() - newsCache.t < 15 * 60 * 1000 && newsCache.items.length) return newsCache.items;
+  const res = await fetch(NEWS_URL, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const xml = await res.text();
+  const decode = s => s.replace(/<!\[CDATA\[|\]\]>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
+  const tag = (block, name) => { const m = block.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`)); return m ? decode(m[1]) : ''; };
+  const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].slice(0, 12).map(([, b]) => {
+    const source = tag(b, 'source');
+    let title = tag(b, 'title');
+    if (source && title.endsWith(' - ' + source)) title = title.slice(0, -(source.length + 3));
+    const link = tag(b, 'link');
+    return { title, source, link: /^https:\/\//.test(link) ? link : null, date: Date.parse(tag(b, 'pubDate')) || null };
+  }).filter(i => i.title && i.link && !OFF_TOPIC.test(i.title));
+  newsCache = { t: Date.now(), items };
+  return items;
+}
+
 function quoteOf(d) {
   const bars = d.bars;
   const last = bars[bars.length - 1];
@@ -112,6 +137,56 @@ async function api(req, res, url) {
       us: us.map(quoteOf).map(q => label(U.US_STOCKS, q)),
       id: id.map(quoteOf).map(q => label(U.ID_STOCKS, q)),
     });
+  }
+
+  if (p === '/api/home') {
+    const [drivers, indo, news] = await Promise.all([
+      fetchMany(M.DRIVERS.map(d => d.symbol)),
+      fetchMany(M.INDO),
+      fetchNews().catch(e => { console.warn('[news]', e.message); return []; }),
+    ]);
+    const change = (d, n, points) => {
+      const b = d.bars, last = d.price ?? b[b.length - 1].c, then = b[Math.max(0, b.length - 1 - n)].c;
+      return points ? last - then : (last / then - 1) * 100;
+    };
+    const live = drivers.map(d => {
+      const def = M.DRIVERS.find(x => x.symbol === d.symbol);
+      const points = def.unit === 'pts';
+      const chg1m = change(d, 21, points);
+      const moved = Math.abs(chg1m) >= def.threshold;
+      const dir = chg1m >= 0 ? 'up' : 'down';
+      const chgText = points ? `${Math.abs(chg1m).toFixed(2)} pts` : `${Math.abs(chg1m).toFixed(1)}%`;
+      return {
+        symbol: d.symbol, label: def.label, price: d.price, currency: d.currency,
+        chg1d: change(d, 1, points), chg1m, points, spark: d.bars.slice(-60).map(b => b.c),
+        tone: !moved ? 'neu' : def.good === 0 ? 'neu' : (chg1m > 0) === (def.good > 0) ? 'pos' : 'neg',
+        moved, text: moved ? def[dir].replace('{chg}', chgText) : `Little changed this month (${chg1m >= 0 ? '+' : '−'}${chgText}) — no strong effect.`,
+        winners: moved ? def.winners[dir] : [], losers: moved ? def.losers[dir] : [],
+      };
+    });
+    return json(res, {
+      updated: Date.now(),
+      snapshot: M.SNAPSHOT,
+      drivers: live,
+      indo: indo.map(d => ({ symbol: d.symbol, name: d.name, price: d.price, chg1d: change(d, 1), chg1m: change(d, 21), chg1y: change(d, d.bars.length - 1), spark: d.bars.map(b => b.c) })),
+      news,
+    });
+  }
+
+  if (p === '/api/signals' && url.searchParams.has('symbols')) {
+    // Score arbitrary symbols (e.g. a visitor's holdings), ranked against their home market's peers.
+    const extra = [...new Set(url.searchParams.get('symbols').split(',').map(s => s.trim().toUpperCase()).filter(s => SYMBOL_RE.test(s)))].slice(0, 30);
+    const groups = [
+      [U.ID_STOCKS, extra.filter(s => s.endsWith('.JK'))],
+      [U.US_STOCKS, extra.filter(s => !s.endsWith('.JK'))],
+    ].filter(([, syms]) => syms.length);
+    const rows = [];
+    for (const [peers, syms] of groups) {
+      const data = await fetchMany([...new Set([...peers.map(x => x.symbol), ...syms])]);
+      const scored = analyze(data.map(d => ({ ...d, sector: (peers.find(x => x.symbol === d.symbol) || {}).sector })));
+      rows.push(...scored.filter(r => syms.includes(r.symbol)));
+    }
+    return json(res, { updated: Date.now(), rows });
   }
 
   if (p === '/api/signals') {

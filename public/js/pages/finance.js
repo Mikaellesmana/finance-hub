@@ -1,4 +1,4 @@
-import { api, esc, flag, fmtMoney, fmtPrice, fmtPct, cls, uid, shortSym, goTrade } from '../util.js';
+import { api, esc, flag, fmtMoney, fmtPrice, fmtPct, cls, uid, shortSym, goTrade, CURRENCIES, currencyLabel } from '../util.js';
 
 const EXPENSE_CATS = ['Housing', 'Food & Dining', 'Transport', 'Utilities & Bills', 'Shopping', 'Entertainment', 'Health', 'Education', 'Family & Gifts', 'Insurance', 'Debt Payment', 'Other'];
 const INCOME_CATS = ['Salary', 'Business', 'Freelance', 'Dividends', 'Interest', 'Capital Gains', 'Gift', 'Other'];
@@ -10,7 +10,11 @@ const empty = () => ({ baseCurrency: 'IDR', transactions: [], holdings: [], asse
 
 let state = null;
 let prices = {};    // yahoo symbol -> quote
-let usdIdr = null;  // IDR per USD
+// Units of each currency per 1 USD (live from Yahoo; fallbacks until loaded).
+let rates = { USD: 1, IDR: 16500, TWD: 32 };
+let ratesLive = false;
+const FX_SYMBOLS = { IDR: 'IDR=X', TWD: 'TWD=X' };
+const currencyOptions = () => Object.keys(CURRENCIES).map(c => `<option value="${c}">${currencyLabel(c)}</option>`).join('');
 let tab = 'overview';
 const localDate = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 let month = localDate(new Date()).slice(0, 7);
@@ -44,11 +48,11 @@ function save() {
 }
 
 async function refreshPrices(el) {
-  const syms = [...new Set(state.holdings.map(h => h.symbol)), 'IDR=X'];
+  const syms = [...new Set(state.holdings.map(h => h.symbol)), ...Object.values(FX_SYMBOLS)];
   try {
     const quotes = await api('/api/quotes?symbols=' + encodeURIComponent(syms.join(',')));
     quotes.forEach(q => { prices[q.symbol] = q; });
-    usdIdr = prices['IDR=X']?.price || usdIdr;
+    for (const [c, sym] of Object.entries(FX_SYMBOLS)) if (prices[sym]?.price) { rates[c] = prices[sym].price; ratesLive = true; }
     render(el);
   } catch (e) { console.warn(e); }
 }
@@ -57,18 +61,15 @@ async function refreshPrices(el) {
 const base = () => state.baseCurrency;
 function toBase(amount, currency) {
   const b = base();
-  if (!currency || currency === b) return amount;
-  const rate = usdIdr || 16000;
-  if (currency === 'USD' && b === 'IDR') return amount * rate;
-  if (currency === 'IDR' && b === 'USD') return amount / rate;
-  return amount;
+  if (!currency || currency === b || !rates[currency] || !rates[b]) return amount;
+  return (amount / rates[currency]) * rates[b];
 }
 const money = (n, compact) => fmtMoney(n, base(), compact);
 
 function holdingRows() {
   return state.holdings.map(h => {
     const q = prices[h.symbol];
-    const currency = q?.currency || (h.symbol.endsWith('.JK') ? 'IDR' : 'USD');
+    const currency = q?.currency || (/.JK$/.test(h.symbol) ? 'IDR' : /.TWO?$/.test(h.symbol) ? 'TWD' : 'USD');
     const price = q?.price ?? h.avgCost;
     const cost = h.qty * h.avgCost;
     const value = h.qty * price;
@@ -77,7 +78,7 @@ function holdingRows() {
       pl: value - cost, plPct: cost ? (value / cost - 1) * 100 : 0,
       dayPl: q ? h.qty * q.change : 0,
       valueBase: toBase(value, currency), costBase: toBase(cost, currency),
-      market: h.symbol.endsWith('.JK') ? 'Indonesia' : 'US',
+      market: /.JK$/.test(h.symbol) ? 'Indonesia' : /.TWO?$/.test(h.symbol) ? 'Taiwan' : 'US',
     };
   });
 }
@@ -116,8 +117,8 @@ function render(el) {
     <div class="page-head">
       <div><h1>My Finances</h1><p>Your personal financial statement — cashflow, investments, assets &amp; net worth.</p></div>
       <div class="row">
-        <div class="seg" id="fx-base">${['IDR', 'USD'].map(c => `<button data-c="${c}" class="${base() === c ? 'active' : ''}">${c}</button>`).join('')}</div>
-        <span class="muted small num">${usdIdr ? `1 USD = Rp ${fmtPrice(usdIdr, 'IDR')}` : ''}</span>
+        <div class="seg" id="fx-base">${Object.keys(CURRENCIES).map(c => `<button data-c="${c}" class="${base() === c ? 'active' : ''}">${currencyLabel(c)}</button>`).join('')}</div>
+        <span class="muted small num" title="Live exchange rates">${ratesLive ? `1 USD = Rp ${fmtPrice(rates.IDR, 'IDR')} · NT$ ${rates.TWD.toFixed(2)}` : 'Loading rates…'}</span>
         <button class="btn sm" id="fx-export">Export</button>
         <label class="btn sm" style="margin:0">Import<input type="file" accept=".json" id="fx-import" hidden></label>
       </div>
@@ -156,7 +157,7 @@ function renderOverview(t, el) {
 
   const groups = {};
   state.assets.filter(a => a.kind === 'asset').forEach(a => { groups[a.category] = (groups[a.category] || 0) + toBase(+a.value, a.currency); });
-  T.hs.forEach(h => { const k = `Stocks (${h.market === 'US' ? 'US' : 'IDX'})`; groups[k] = (groups[k] || 0) + h.valueBase; });
+  T.hs.forEach(h => { const k = `Stocks (${({ US: 'US', Indonesia: 'IDX', Taiwan: 'TWSE' })[h.market]})`; groups[k] = (groups[k] || 0) + h.valueBase; });
   const liabGroups = {};
   state.assets.filter(a => a.kind === 'liability').forEach(a => { liabGroups[a.category] = (liabGroups[a.category] || 0) + toBase(+a.value, a.currency); });
 
@@ -235,7 +236,7 @@ function renderCashflow(t, el) {
         <label class="field">Date<input type="date" name="date" value="${month === today.slice(0, 7) ? today : month + '-01'}" required></label>
         <label class="field">Category<select name="category">${EXPENSE_CATS.map(c => `<option>${c}</option>`).join('')}</select></label>
         <label class="field">Amount<input type="number" name="amount" min="0" step="any" placeholder="0" required></label>
-        <label class="field">Currency<select name="currency"><option>IDR</option><option>USD</option></select></label>
+        <label class="field">Currency<select name="currency">${currencyOptions()}</select></label>
         <label class="field">Note<input name="note" placeholder="optional"></label>
         <button class="btn primary">Add</button>
       </form>
@@ -286,12 +287,12 @@ function renderInvestments(t, el) {
       <div class="card kpi big"><div class="lbl">Portfolio value</div><div class="val num">${money(tot, true)}</div></div>
       <div class="card kpi"><div class="lbl">Total gain / loss</div><div class="val num ${cls(tot - cost)}">${money(tot - cost, true)}</div><div class="small num ${cls(tot - cost)}">${fmtPct(cost ? (tot / cost - 1) * 100 : 0)}</div></div>
       <div class="card kpi"><div class="lbl">Today</div><div class="val num ${cls(day)}">${money(day, true)}</div></div>
-      <div class="card kpi"><div class="lbl">US / Indonesia split</div><div class="val num">${tot ? Math.round(((byMarket.US || 0) / tot) * 100) : 0}% / ${tot ? Math.round(((byMarket.Indonesia || 0) / tot) * 100) : 0}%</div></div>
+      <div class="card kpi"><div class="lbl">By market</div><div class="val num" style="font-size:18px">${Object.entries(byMarket).map(([m, v]) => `${flag(({ US: 'us', Indonesia: 'id', Taiwan: 'tw' })[m], 14)} ${Math.round((v / (tot || 1)) * 100)}%`).join(' &nbsp;') || '—'}</div></div>
     </div>
     <div class="card" style="margin-bottom:16px">
-      <h2>Add holding <span class="sub">IDX: add “.JK” (e.g. BBCA.JK) · 1 lot = 100 shares</span></h2>
+      <h2>Add holding <span class="sub">IDX: BBCA.JK (1 lot = 100 shares) · US: AAPL · Taiwan: 2330.TW (1 lot = 1,000 shares)</span></h2>
       <form class="form-row" id="h-form">
-        <label class="field">Symbol<input name="symbol" placeholder="BBCA.JK or AAPL" required></label>
+        <label class="field">Symbol<input name="symbol" placeholder="BBCA.JK, AAPL, 2330.TW" required></label>
         <label class="field">Shares<input type="number" name="qty" min="0" step="any" required></label>
         <label class="field">Avg cost / share<input type="number" name="avgCost" min="0" step="any" required></label>
         <label class="field">Note<input name="note" placeholder="optional"></label>
@@ -302,7 +303,7 @@ function renderInvestments(t, el) {
       <div class="card"><h2>Holdings <button class="btn sm" id="h-refresh">Refresh prices</button></h2>
         ${hs.length ? `<div class="table-wrap"><table><thead><tr><th>Symbol</th><th class="r">Shares</th><th class="r">Avg cost</th><th class="r">Price</th><th class="r">Day</th><th class="r">Value</th><th class="r">P/L</th><th class="r">Weight</th><th></th></tr></thead><tbody>
           ${hs.map(h => `<tr class="click" data-sym="${esc(h.symbol)}">
-            <td><b>${esc(shortSym(h.symbol))}</b> <span class="muted small">${flag(h.market === 'US' ? 'us' : 'id', 14)}</span><div class="muted small">${esc(h.q?.name || h.note || '')}</div></td>
+            <td><b>${esc(shortSym(h.symbol))}</b> <span class="muted small">${flag(({ US: 'us', Indonesia: 'id', Taiwan: 'tw' })[h.market], 14)}</span><div class="muted small">${esc(h.q?.name || h.note || '')}</div></td>
             <td class="r num">${h.qty.toLocaleString()}</td>
             <td class="r num">${fmtPrice(h.avgCost, h.currency)}</td>
             <td class="r num">${fmtPrice(h.price, h.currency)}</td>
@@ -346,7 +347,7 @@ function renderAssets(t, el) {
         <label class="field">Name<input name="name" placeholder="e.g. BCA savings" required></label>
         <label class="field">Category<select name="category">${ASSET_CATS.map(c => `<option>${c}</option>`).join('')}</select></label>
         <label class="field">Current value<input type="number" name="value" min="0" step="any" required></label>
-        <label class="field">Currency<select name="currency"><option>IDR</option><option>USD</option></select></label>
+        <label class="field">Currency<select name="currency">${currencyOptions()}</select></label>
         <button class="btn primary">Add</button>
       </form>
     </div>
@@ -369,7 +370,7 @@ function renderAssets(t, el) {
   t.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { state.assets = state.assets.filter(x => x.id !== b.dataset.del); save(); render(el); });
   t.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => {
     const a = state.assets.find(x => x.id === b.dataset.edit);
-    const v = prompt(`New value for "${a.name}" (${a.currency})`, a.value);
+    const v = prompt(`New value for "${a.name}" (${currencyLabel(a.currency)})`, a.value);
     if (v != null && !isNaN(+v)) { a.value = +v; save(); render(el); }
   });
   t.querySelector('#fx-clear').onclick = () => {

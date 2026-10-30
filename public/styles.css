@@ -204,3 +204,62 @@ tr.click { cursor: pointer; }
 tr.detail td { background: var(--panel-2); white-space: normal; }
 .parts { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; }
 .pick > svg { width: 100%; display: block; }
+
+/* Buy / Hold / Sell signals */
+.act { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.act-buy { background: rgba(34,197,94,.18); color: var(--up); }
+.act-buy-on-dip { background: rgba(20,184,166,.16); color: #5eead4; }
+.act-hold { background: rgba(139,149,168,.16); color: var(--muted); }
+.act-take-profit { background: rgba(245,158,11,.16); color: var(--warn); }
+.act-sell { background: rgba(239,68,68,.16); color: var(--down); }
+.signal-bar { display: flex; height: 10px; border-radius: 99px; overflow: hidden; gap: 2px; }
+.signal-bar > div { opacity: .9; }
+.signal-bar .act-buy { background: var(--up); } .signal-bar .act-buy-on-dip { background: #14b8a6; }
+.signal-bar .act-hold { background: var(--faint); } .signal-bar .act-take-profit { background: var(--warn); } .signal-bar .act-sell { background: var(--down); }
+.plan { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-top: 10px; font-size: 12px; }
+.plan span { display: block; color: var(--muted); font-size: 11px; }
+.plan small { font-weight: 500; opacity: .8; }
+
+/* Home */
+.hero { background: linear-gradient(135deg, rgba(16,185,129,.12), rgba(59,130,246,.08) 60%, transparent); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px; margin-bottom: 16px; }
+.hero h2 { margin: 0 0 6px; font-size: 19px; }
+.hero .verdict { display: inline-block; padding: 3px 10px; border-radius: 99px; font-weight: 700; font-size: 12.5px; margin-bottom: 8px; }
+.macro-tile .lbl { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.macro-tile .val { font-size: 22px; font-weight: 700; margin: 4px 0; }
+.macro-tile p { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
+.impact { display: grid; grid-template-columns: 34px 1fr; gap: 12px; padding: 12px 0; border-bottom: 1px solid rgba(34,44,64,.6); }
+.impact:last-child { border-bottom: 0; }
+.impact .dot { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-weight: 800; font-size: 16px; }
+.impact .dot.pos { background: rgba(34,197,94,.15); color: var(--up); }
+.impact .dot.neg { background: rgba(239,68,68,.15); color: var(--down); }
+.impact .dot.neu { background: rgba(139,149,168,.15); color: var(--muted); }
+.impact h4 { margin: 0 0 2px; font-size: 14px; }
+.impact p { margin: 0; color: var(--muted); font-size: 12.5px; }
+.sector-tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; margin: 4px 4px 0 0; }
+.sector-tag.pos { background: rgba(34,197,94,.12); color: var(--up); }
+.sector-tag.neg { background: rgba(239,68,68,.12); color: var(--down); }
+.news a { display: block; padding: 9px 0; border-bottom: 1px solid rgba(34,44,64,.6); }
+.news a:hover b { color: var(--accent); }
+.news b { font-weight: 500; display: block; }
+.news span { font-size: 11.5px; color: var(--faint); }
+
+/* Learn */
+.learn-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .learn-layout { grid-template-columns: 1fr; } .learn-toc { position: static !important; } }
+.learn-toc { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 2px; }
+.learn-toc a { padding: 7px 10px; border-radius: 7px; color: var(--muted); font-size: 13px; }
+.learn-toc a:hover { background: var(--panel-2); color: var(--text); }
+.lesson { margin-bottom: 16px; scroll-margin-top: 16px; }
+.lesson h2 { font-size: 17px; justify-content: flex-start; }
+.lesson .level { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--panel-2); color: var(--muted); }
+.lesson p, .lesson li { color: #c5ccd8; line-height: 1.6; }
+.lesson ul { padding-left: 20px; }
+.lesson details { border: 1px solid var(--border); border-radius: 9px; padding: 10px 14px; margin: 8px 0; background: var(--bg); }
+.lesson summary { cursor: pointer; font-weight: 600; }
+.lesson .tip { border-left: 3px solid var(--accent); background: rgba(16,185,129,.06); padding: 8px 12px; border-radius: 0 8px 8px 0; font-size: 13px; margin: 10px 0; }
+.calc { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; align-items: end; }
+.calc-out { margin-top: 12px; padding: 12px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; font-size: 13.5px; }
+.glossary dt { font-weight: 700; margin-top: 10px; }
+.glossary dd { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.home-cols { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+@media (max-width: 1000px) { .home-cols { grid-template-columns: 1fr; } }

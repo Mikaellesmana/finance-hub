@@ -16,22 +16,23 @@ export function fmtNum(n, digits = 2) {
 
 export function fmtPrice(n, currency) {
   if (n == null || isNaN(n)) return '—';
-  if (currency === 'IDR' && Math.abs(n) >= 1000) return fmtNum(n, 0);
+  if (currency === 'IDR') return fmtNum(n, Math.abs(n) < 10 ? 2 : 0);
   return fmtNum(n, Math.abs(n) < 10 ? 3 : 2);
 }
 
+// Supported money currencies. TWD is shown to users as "NTD".
+export const CURRENCIES = { IDR: { prefix: 'Rp ', label: 'IDR', digits: 0 }, USD: { prefix: '$', label: 'USD', digits: 2 }, TWD: { prefix: 'NT$ ', label: 'NTD', digits: 0 } };
+export const currencyLabel = c => CURRENCIES[c]?.label || c;
+
 export function fmtMoney(n, currency = 'IDR', compact = false) {
   if (n == null || isNaN(n)) return '—';
-  if (currency === 'IDR') {
-    const sign = n < 0 ? '−' : '';
-    const a = Math.abs(n);
-    if (compact && a >= 1e12) return `${sign}Rp ${(a / 1e12).toFixed(2)}T`;
-    if (compact && a >= 1e9) return `${sign}Rp ${(a / 1e9).toFixed(2)}B`;
-    if (compact && a >= 1e6) return `${sign}Rp ${(a / 1e6).toFixed(1)}M`;
-    return `${sign}Rp ${Math.round(a).toLocaleString('en-US')}`;
-  }
-  if (compact && Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
-  return n.toLocaleString('en-US', { style: 'currency', currency });
+  const c = CURRENCIES[currency] || { prefix: currency + ' ', digits: 2 };
+  const sign = n < 0 ? '−' : '';
+  const a = Math.abs(n);
+  if (compact && a >= 1e12) return `${sign}${c.prefix}${(a / 1e12).toFixed(2)}T`;
+  if (compact && a >= 1e9) return `${sign}${c.prefix}${(a / 1e9).toFixed(2)}B`;
+  if (compact && a >= 1e6) return `${sign}${c.prefix}${(a / 1e6).toFixed(currency === 'USD' ? 2 : 1)}M`;
+  return `${sign}${c.prefix}${a.toLocaleString('en-US', { minimumFractionDigits: c.digits, maximumFractionDigits: c.digits })}`;
 }
 
 export function fmtPct(n, digits = 2) {
@@ -69,11 +70,12 @@ export function heatColor(pct) {
 export function flag(code, size = 16) {
   const h = Math.round(size * 0.7);
   if (code === 'id') return `<svg class="flag" width="${size}" height="${h}" viewBox="0 0 3 2"><rect width="3" height="1" fill="#e11d48"/><rect y="1" width="3" height="1" fill="#f1f5f9"/></svg>`;
+  if (code === 'tw') return `<svg class="flag" width="${size}" height="${h}" viewBox="0 0 3 2"><rect width="3" height="2" fill="#dc2626"/><rect width="1.5" height="1" fill="#1e3a8a"/><circle cx=".75" cy=".5" r=".22" fill="#f1f5f9"/></svg>`;
   if (code === 'us') return `<svg class="flag" width="${size}" height="${h}" viewBox="0 0 19 13"><rect width="19" height="13" fill="#f1f5f9"/>${[0, 2, 4, 6, 8, 10, 12].map(y => `<rect y="${y}" width="19" height="1" fill="#dc2626"/>`).join('')}<rect width="8" height="7" fill="#1e3a8a"/></svg>`;
   return '';
 }
 
-export const shortSym =s => s.replace(/\.JK$/, '').replace(/^\^/, '');
+export const shortSym = s => s.replace(/\.(JK|TWO?)$/, '').replace(/^\^/, '');
 
 // Yahoo ticker -> TradingView symbol.
 const TV_MAP = {
@@ -87,6 +89,8 @@ export function tvSymbol(y) {
   if (y.includes(':')) return y.toUpperCase();
   if (TV_MAP[y]) return TV_MAP[y];
   if (/\.JK$/i.test(y)) return 'IDX:' + y.replace(/\.JK$/i, '').toUpperCase();
+  if (/\.TW$/i.test(y)) return 'TWSE:' + y.replace(/\.TW$/i, '').toUpperCase();
+  if (/\.TWO$/i.test(y)) return 'TPEX:' + y.replace(/\.TWO$/i, '').toUpperCase();
   return y.toUpperCase().replace('-', '.');
 }
 // TradingView / user input -> Yahoo ticker.
@@ -95,8 +99,10 @@ export function yahooSymbol(s) {
   const rev = Object.entries(TV_MAP).find(([, tv]) => tv === s);
   if (rev) return rev[0];
   if (s.startsWith('IDX:')) return s.slice(4) + '.JK';
+  if (s.startsWith('TWSE:')) return s.slice(5) + '.TW';
+  if (s.startsWith('TPEX:')) return s.slice(5) + '.TWO';
   if (s.includes(':')) s = s.split(':')[1];
-  return s.replace('.', '-').replace(/-JK$/, '.JK');
+  return s.replace(/\.([A-Z])$/, '-$1'); // class shares: BRK.B -> BRK-B
 }
 
 // Embed a TradingView widget into `el`.

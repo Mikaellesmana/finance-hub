@@ -1,16 +1,18 @@
 import { tvWidget } from './util.js';
+import home from './pages/home.js';
 import market from './pages/market.js';
 import finance from './pages/finance.js';
 import trade from './pages/trade.js';
 import signals from './pages/signals.js';
+import learn from './pages/learn.js';
 
-const routes = { market, finance, trade, signals };
+const routes = { home, market, finance, trade, signals, learn };
 const view = document.getElementById('view');
 let cleanup = null;
 
 function route() {
   const [path, query] = location.hash.replace(/^#\/?/, '').split('?');
-  const name = routes[path] ? path : 'market';
+  const name = routes[path] ? path : 'home';
   const params = new URLSearchParams(query || '');
 
   document.querySelectorAll('nav a').forEach(a => a.classList.toggle('active', a.dataset.route === name));
