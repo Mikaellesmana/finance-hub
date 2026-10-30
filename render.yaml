@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: finance-hub
+    runtime: node
+    plan: free
+    buildCommand: "true"
+    startCommand: node server.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

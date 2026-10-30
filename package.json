@@ -1,0 +1,11 @@
+{
+  "name": "finance-hub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Personal finance hub: US & Indonesia market flow, personal financial statement, live charts and stock ideas.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=18" }
+}
